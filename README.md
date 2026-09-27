@@ -1,9 +1,14 @@
 # Colourable Aquariums
-<img width="1277" height="827" alt="Screenshot 2026-09-27 135130" src="https://github.com/user-attachments/assets/3b221bf0-76cb-4ae0-b722-99d23bed21f7" />
 
 Version **0.7.81.5** · Windows x64 · Two Point Museum
 
 Adds a Choose Colour action to supported aquarium rooms. Aquarium colours are saved separately under Mods/Saves. Works independently of Expanded Colour Picker; installing both enables its 35 swatches, RGB/HEX entry and eyedropper.
+
+<img width="1277" height="827" alt="Screenshot 2026-09-27 135130" src="https://github.com/user-attachments/assets/3b221bf0-76cb-4ae0-b722-99d23bed21f7" />
+
+## Video
+
+https://www.youtube.com/watch?v=VCXSuzt28XY
 
 ## Installation
 
