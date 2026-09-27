@@ -1,0 +1,13 @@
+src/build/
+build/
+release-assets/
+__pycache__/
+*.pyc
+%SystemDrive%/
+ProgramData/
+*.db
+*.log
+Logs/
+Saves/
+Thumbs.db
+.DS_Store

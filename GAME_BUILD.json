@@ -1,0 +1,17 @@
+{
+  "checked": "2026-09-27",
+  "files": {
+    "TPM.exe": {
+      "bytes": 682576,
+      "sha256": "e5cbc5f5b11034f63c1fd1fc1f70a9b578e33503c04f44be4ebea874636c1b28"
+    },
+    "GameAssembly.dll": {
+      "bytes": 379076608,
+      "sha256": "52b6a29ca82fe1ad517367a3333b4bc2fd7d56d7831d0474b75b960e10fc66df"
+    },
+    "UnityPlayer.dll": {
+      "bytes": 33664936,
+      "sha256": "b407f9a487761668f89b40bcd41aaf9fe7ef18df86733d7b308196ae0d6d4c0f"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+* text=auto
+*.dll binary
+*.png binary
+*.zip binary
