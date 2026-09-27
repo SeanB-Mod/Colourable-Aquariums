@@ -1,4 +1,5 @@
 # Colourable Aquariums
+<img width="1277" height="827" alt="Screenshot 2026-09-27 135130" src="https://github.com/user-attachments/assets/3b221bf0-76cb-4ae0-b722-99d23bed21f7" />
 
 Version **0.7.81.5** · Windows x64 · Two Point Museum
 
