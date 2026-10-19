@@ -31,7 +31,7 @@ static BOOL p78_find_window(HWND window,i64){
 }
 static DWORD worker(void*){
     if(!init_winapi())return 0;
-    init_log_path();p78_init_logging();p61_install_exception_observer();
+    init_log_path();p78_init_logging();
     void* k=find_loaded_module("kernel32.dll");void* u=find_loaded_module("user32.dll");
     p78_threadId=(decltype(p78_threadId))resolve_export(k,"GetCurrentThreadId");
     p78_clock=(decltype(p78_clock))resolve_export(k,"GetTickCount64");
@@ -41,7 +41,7 @@ static DWORD worker(void*){
     auto post=(BOOL(*)(HWND,unsigned,uptr,i64))resolve_export(u,"PostMessageA");
     p78_nextHook=(decltype(p78_nextHook))resolve_export(u,"CallNextHookEx");
     if(!p78_threadId||!p78_clock||!enumerate||!hook||!unhook||!post||!p78_nextHook||!p70_windowProcess||!p70_processId||!p70_className){log_raw("0.7.81 BOOT ERROR: message-dispatch API missing.\r\n");return 0;}
-    log_raw("TPM Colourable Aquariums 0.7.81.5: game-thread bootstrap; retail-luminance glow, 50% at black / 100% from quarter value.\r\n");
+    log_raw("TPM Colourable Aquariums Steam Workshop v1.0: game-thread bootstrap; Dredge glow at 25% of corrected baseline; standard retail-luminance glow, 50% at black / 100% from quarter value.\r\n");
     pSleep(15000);
     for(int i=0;i<120&&!p78_window;++i){enumerate(p78_find_window,0);if(!p78_window)pSleep(1000);}
     if(!p78_window){log_raw("0.7.81 BOOT ERROR: Unity window not found within timeout.\r\n");return 0;}

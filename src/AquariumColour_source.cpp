@@ -1,4 +1,4 @@
-// Colourable Aquariums 0.7.81.5 — UI-only release candidate.
+// Colourable Aquariums - Steam Workshop v1.0.
 // Unity work is dispatched to the game thread; save data lives under Mods/Saves.
 // Optional Colour Picker bridges do not require that mod to be installed.
 // See COMPATIBILITY.md for native layout and hook assumptions.
@@ -1776,7 +1776,6 @@ static bool p55_consumer_ready(){return __atomic_load_n(&g_p55ConsumerReady,__AT
 static bool p55_install_consumer_hook();
 static void p78_free_trampoline(void*);
 static bool p78_seal_trampoline(void*,usize);
-static void p55_status();
 // Slot publication uses a bounded exclusive lock. No unbounded game-thread spin.
 static bool p54_slot_write_begin(P53FloorSlot& slot){
     for(int tries=0;tries<3;++tries){u32 q=__atomic_load_n(&slot.seq,__ATOMIC_RELAXED);
@@ -1957,13 +1956,25 @@ static bool p48_floor_from_state(void* st,void*& room,void*& floor){
     Il2CppClass* fc=il2cpp_object_get_class((Il2CppObject*)floor);char full[260];class_full(fc,full,sizeof(full));
     return streq(full,"TPS.Game.FloorAreaInstance");
 }
+// Cache misses too: standard-only museums otherwise repeat a global physical
+// marker search for every colour update. Raw renderer identities are compared
+// only against the refreshed, rooted water roster and are never dereferenced.
 static int p48_cached_dredge_index(){
     refresh_water_targets();
     if(g_p48DredgeWater){
         for(int i=0;i<g_waterCount;++i)if(g_water[i].renderer==g_p48DredgeWater)return i;
         g_p48DredgeWater=nullptr;
     }
+    static u64 (*clock)()=nullptr;static bool clockAttempted=false;
+    if(!clockAttempted){clockAttempted=true;clock=(u64(*)())resolve_export(find_loaded_module("kernel32.dll"),"GetTickCount64");}
+    static bool missed=false;static u64 last=0,signature=0;
+    u64 now=clock?clock():0;
+    u64 current=aquarium_state_signature();
+    current^=(u64)g_waterCount;current*=1099511628211ull;
+    for(int i=0;i<g_waterCount;++i){current^=(u64)(uptr)g_water[i].renderer;current*=1099511628211ull;}
+    if(missed&&clock&&current==signature&&now-last<5000)return -1;
     int di=p34_find_physical_dredge_water();
+    missed=di<0;last=now;signature=current;
     if(di>=0&&di<g_waterCount)g_p48DredgeWater=g_water[di].renderer;
     return di;
 }
@@ -1986,17 +1997,17 @@ static bool p53_state_focus(void* st,F3& focus,void*& floor){
     return p53_transform_position(tr,focus);
 }
 static int p53_build_standard_map(P53StandardMapEntry* out,int cap,bool verbose){
-    if(!out||cap<=0)return 0; refresh_water_targets(); p48_cached_dredge_index();
+    if(!out||cap<=0)return 0; refresh_water_targets();
     StateList sl=get_states();
     struct SRec{void* st;void* floor;F3 focus;int index;}; SRec states[16]{}; int ns=0;
     for(int i=0;i<sl.count&&ns<16;++i){
-        void* st=sl.states[i]; if(!st||field_object(st,"_highestPriorityAquariumTintDefinition"))continue;
+        void* st=sl.states[i]; if(!st)continue;
         F3 fp{};void* floor=nullptr;if(!p53_state_focus(st,fp,floor))continue;
         states[ns++]={st,floor,fp,i};
     }
     struct WRec{void* water;Bounds6 b;int index;}; WRec waters[16]{}; int nw=0;
     for(int i=0;i<g_waterCount&&nw<16;++i){
-        void* water=g_water[i].renderer;if(!water||water==g_p48DredgeWater)continue;Bounds6 b{};if(!get_renderer_bounds(water,b))continue;
+        void* water=g_water[i].renderer;if(!water)continue;Bounds6 b{};if(!get_renderer_bounds(water,b))continue;
         waters[nw++]={water,b,i};
     }
     bool usedS[16]{}; bool usedW[16]{}; int mapped=0;
@@ -2069,11 +2080,16 @@ static bool p48_sync_standard_floor_sink_for_current(F4 color,bool verbose){
 
 static P49GlowRoute p49_current_glow_route(bool verbose){
     refresh_water_targets();
-    if(g_waterCount<=0||g_waterTarget<0||g_waterTarget>=g_waterCount){if(verbose)log_raw("0.7.81 ROUTE: no valid selected water; glow write suppressed.\r\n");return P49_ROUTE_UNKNOWN;}
-    p48_cached_dredge_index();void* current=g_water[g_waterTarget].renderer;
-    if(g_p48DredgeWater&&current==g_p48DredgeWater){if(verbose){char b[300];psprintf(b,"0.7.81 ROUTE: water %d/%d is PHYSICAL DREDGE -> retail AquariumTintDefinition path only.\r\n",g_waterTarget+1,g_waterCount);log_raw(b);}return P49_ROUTE_DREDGE;}
-    void* st=nullptr;void* floor=nullptr;if(p53_map_selected_standard(verbose,st,floor)){if(verbose){char b[420];psprintf(b,"0.7.81 ROUTE: water %d/%d physically maps to null-tint state=%p floor=%p -> STANDARD FloorArea path.\r\n",g_waterTarget+1,g_waterCount,st,floor);log_raw(b);}return P49_ROUTE_STANDARD;}
-    if(verbose){char b[400];psprintf(b,"0.7.81 ROUTE: selected water has no safe physical standard mapping (waters=%d nullTintStates=%d); glow write suppressed.\r\n",g_waterCount,p48_null_tint_state_count());log_raw(b);}return P49_ROUTE_UNKNOWN;
+    if(g_waterCount<=0||g_waterTarget<0||g_waterTarget>=g_waterCount)return P49_ROUTE_UNKNOWN;
+    // Map every live aquarium, with or without a retail fish tint. The consumer
+    // colours the selected floor only and preserves its current retail brightness.
+    void* st=nullptr;void* floor=nullptr;
+    if(p53_map_selected_standard(verbose,st,floor)){
+        if(verbose)log_raw("GLOW ROUTE: physical aquarium match -> per-tank lighting consumer.\r\n");
+        return P49_ROUTE_STANDARD;
+    }
+    if(verbose)log_raw("GLOW ROUTE: no safe physical aquarium match; no shared-tint writes.\r\n");
+    return P49_ROUTE_UNKNOWN;
 }
 
 static int p49_sync_glow_for_current(F4 color,bool verbose){
@@ -2238,6 +2254,5 @@ static void p56_tick(){
     escapeWasDown=escape;p56_busy=false;
 }
 
-#include "CrashDiagnostic.h"
 
 #include "GameThreadBootstrap.h"

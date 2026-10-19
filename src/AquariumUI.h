@@ -1,3 +1,4 @@
+#include "InputHookGuard.h"
 // Included after the existing colour, live-state and native-hook helpers.
 #include "AquariumSelection.h"
 using P56Void=void(*)(void*,const MethodInfo*);
@@ -208,19 +209,39 @@ static void p56_add_button(void* inspector){
     if(aquarium){p56_setActive(p56_go(p56_button),true);p57_once(128,"0.7.81 UI DISCOVERY: native SetupButton completed and colour button activated.\r\n");}
 }
 static void p57_reconcile(){
-    if(!p56_ready||p56_menu)return;
+    if(!p56_ready||p56_menu||!p56_clock)return;
+    // Keep wrappers rooted, validate native Unity lifetime each poll, and
+    // release destroyed candidates. RefreshButtons already handles new UI.
+    static void* cached[128]{};static AquariumGCHandle roots[128]{};
+    static unsigned count=0;static u64 nextScan=0;
+    for(unsigned i=0;i<count;){
+        if(!p56_alive(cached[i])){
+            if(roots[i])il2cpp_gchandle_free(roots[i]);
+            --count;cached[i]=cached[count];roots[i]=roots[count];cached[count]=nullptr;roots[count]=0;
+        }else ++i;
+    }
+    auto reconcile=[](void* inspector){
+        if(!p56_active(inspector)||!p56_opened(inspector))return false;
+        if(!p56_live_state(field_object(inspector,"_room")))return false;
+        if(inspector==p56_inspector&&p56_alive(p56_button)&&p56_active(p56_button))return true;
+        p56_originalRefresh(inspector,nullptr);p56_add_button(inspector);return true;
+    };
+    for(unsigned i=0;i<count;++i)if(reconcile(cached[i]))return;
+    u64 now=p56_clock();if(now<nextScan)return;nextScan=now+(count?5000:1000);
     auto cls=find_class("TPS.Game.UI","InspectorMenuRoom");if(!cls)return;
     void* type=il2cpp_type_get_object(il2cpp_class_get_type(cls));void* a[]={type};
-    auto arr=(Il2CppArray*)invoke(M_Resources_FindAll,nullptr,a);if(!arr)return;
+    auto arr=(Il2CppArray*)invoke(M_Resources_FindAll,nullptr,a);if(!arr||arr->max_length>128)return;
+    auto arrayRoot=il2cpp_gchandle_new((Il2CppObject*)arr,false);if(!arrayRoot)return;
     for(uptr i=0;i<arr->max_length;++i){void* inspector=arr->vector[i];
-        if(!p56_alive(inspector)||!p56_active(inspector)||!p56_opened(inspector))continue;
-        p57_once(256,"0.7.81 UI DISCOVERY: periodic check found an open room inspector.\r\n");
-        if(!p56_live_state(field_object(inspector,"_room")))continue;
-        if(inspector==p56_inspector&&p56_alive(p56_button)&&p56_active(p56_button))return;
-        // Run the stock refresh first, so its visible-button list is cleared and cannot accumulate duplicates.
-        p56_originalRefresh(inspector,nullptr);p56_add_button(inspector);return;
+        if(!p56_alive(inspector))continue;bool known=false;
+        for(unsigned j=0;j<count;++j)if(cached[j]==inspector)known=true;
+        if(!known&&count<128){auto root=il2cpp_gchandle_new((Il2CppObject*)inspector,false);
+            if(root){cached[count]=inspector;roots[count++]=root;}}
     }
+    il2cpp_gchandle_free(arrayRoot);
+    for(unsigned i=0;i<count;++i)if(reconcile(cached[i]))return;
 }
+
 static bool p63_menu_callback(void* menu,const char* setter,const char* getter,void* value){
     auto cls=find_class("TPS.Game.UI","MenuBase");
     auto set=find_method_name_params(cls,setter,1);
@@ -393,7 +414,7 @@ static void p56_close_hook(void* self,void* requester,const MethodInfo* m){
         return;
     }p56_originalClose(self,requester,m);
 }
-struct P56Hook{const char* ns;const char* cls;const char* method;int argc;const u8* bytes;int size;void* replacement;void** original;bool ripR10;u8* target;u8* trampoline;};
+struct P56Hook{const char* ns;const char* cls;const char* method;int argc;const u8* bytes;int size;void* replacement;void** original;bool ripR10;u8* target;u8* trampoline;u8 originalBytes[16];};
 static bool p56_install(){
     if(!p78_main())return false;
     p56_aliveMethod=find_method_param1(C_Object,"op_Implicit","UnityEngine.Object");
@@ -420,7 +441,23 @@ static bool p56_install(){
     // Check EVERY target before modifying any code. Unsupported game builds fail closed.
     for(auto& h:hooks){auto c=find_class(h.ns,h.cls);auto m=c?find_method_name_params(c,h.method,h.argc):nullptr;h.target=m?(u8*)*(void* const*)m:nullptr;
         if(!h.target||!ptr_in_module(h.target,find_loaded_module("GameAssembly.dll"),32))return abandon();
-        for(int i=0;i<h.size;++i)if(h.target[i]!=h.bytes[i]){char diag[300];psprintf(diag,"0.7.81 UI: %s.%s prologue mismatch at +%d (got %02X expected %02X); no UI hooks installed.\r\n",h.cls,h.method,i,(unsigned)h.target[i],(unsigned)h.bytes[i]);log_raw(diag);return abandon();}
+        // Only the disp32 operand may vary; all instruction bytes remain exact.
+        int checkedBytes=h.ripR10?10:h.size;
+        for(int i=0;i<checkedBytes;++i)if(h.target[i]!=h.bytes[i]){char diag[300];psprintf(diag,"1.0.1-test UI: %s.%s prologue mismatch at +%d (got %02X expected %02X); no UI hooks installed.\r\n",h.cls,h.method,i,(unsigned)h.target[i],(unsigned)h.bytes[i]);log_raw(diag);return abandon();}
+        if(h.ripR10){
+            void* ga=find_loaded_module("GameAssembly.dll");uptr operand=0;
+            if(!p91_input_operand(h.target,(uptr)ga,pe_image_size(ga),operand)){
+                log_raw("1.0.1-test UI: UpdateInput RIP operand outside GameAssembly; no UI hooks installed.\r\n");return abandon();
+            }
+            using QueryFn=usize(*)(const void*,P91MemoryInfo*,usize);
+            auto query=(QueryFn)resolve_export(find_loaded_module("kernel32.dll"),"VirtualQuery");
+            P91MemoryInfo memory{};
+            if(!query || query((void*)operand,&memory,sizeof(memory))!=sizeof(memory) || !p91_operand_readable(operand,(uptr)ga,memory)){
+                log_raw("1.0.1-test UI: UpdateInput RIP operand is not readable GameAssembly image memory; no UI hooks installed.\r\n");return abandon();
+            }
+            char diag[300];psprintf(diag,"1.0.1-test UI: UpdateInput signature accepted; RIP bytes=%02X %02X %02X %02X; operand RVA=0x%X validated.\r\n",(unsigned)h.target[10],(unsigned)h.target[11],(unsigned)h.target[12],(unsigned)h.target[13],(unsigned)(operand-(uptr)ga));log_raw(diag);
+        }
+        memcpy(h.originalBytes,h.target,h.size);
         h.trampoline=(u8*)pVirtualAlloc(nullptr,64,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE);if(!h.trampoline)return abandon();
         int n=h.size;
         if(h.ripR10){
@@ -437,6 +474,6 @@ static bool p56_install(){
         p51_write_abs_jump(h.target,h.replacement);for(int i=14;i<h.size;++i)h.target[i]=0x90;
         pFlushInstructionCache(pGetCurrentProcess(),h.target,h.size);DWORD ignored;pVirtualProtect(h.target,h.size,old,&ignored);++patched;
     }
-    if(patched!=6){for(int i=0;i<patched;++i){auto& h=hooks[i];DWORD old=0;if(pVirtualProtect(h.target,h.size,PAGE_EXECUTE_READWRITE,&old)){memcpy(h.target,h.bytes,h.size);pFlushInstructionCache(pGetCurrentProcess(),h.target,h.size);DWORD ignored;pVirtualProtect(h.target,h.size,old,&ignored);}}return false;}
-    p56_ready=true;log_raw("0.7.81 UI: six guarded hooks installed on game thread; native aquarium button enabled.\r\n");return true;
+    if(patched!=6){for(int i=0;i<patched;++i){auto& h=hooks[i];DWORD old=0;if(pVirtualProtect(h.target,h.size,PAGE_EXECUTE_READWRITE,&old)){memcpy(h.target,h.originalBytes,h.size);pFlushInstructionCache(pGetCurrentProcess(),h.target,h.size);DWORD ignored;pVirtualProtect(h.target,h.size,old,&ignored);}}return false;}
+    p56_ready=true;log_raw("1.0.1-test UI: six guarded hooks installed on game thread; native aquarium button enabled.\r\n");return true;
 }

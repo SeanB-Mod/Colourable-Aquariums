@@ -7,10 +7,10 @@ a=p.parse_args()
 root=pathlib.Path(__file__).resolve().parent
 manifest=json.loads((root/'PACKAGE_MANIFEST.json').read_text())
 project=manifest['project'];version=(root/'VERSION').read_text().strip()
-assert re.fullmatch(r'[0-9]+(?:\.[0-9]+){2,3}',version)
+assert re.fullmatch(r'[0-9]+(?:\.[0-9]+){1,3}',version)
 out=a.output or root/'release-assets';out.mkdir(parents=True,exist_ok=True)
 stem=project+'-v'+version
-runtimeName=stem+'-Windows-x64.zip';sourceName=stem+'-GitHub-Pack.zip'
+runtimeName=stem+'-Windows-x64.zip';sourceName=stem+'-GitHub-Pack.zip';workshopName=stem+'-Workshop-Upload.zip'
 def digest(data):return hashlib.sha256(data).hexdigest()
 def safe(name):
     path=pathlib.PurePosixPath(name)
@@ -45,6 +45,11 @@ for name,data in source.items():
     assert not name.lower().endswith(('.dll','.zip'))
     if name.endswith(('.cpp','.h','.py','.ps1','.md','.ini','.json')):
         assert bytes([83,101,97,110,45]) not in data and bytes([79,110,101,68,114,105,118,101]) not in data,(name,'personal path')
+workshop={'DLL Mod/TPM-AquaColour.dll':a.binary.read_bytes()}
+workshopData=zip_bytes(workshop)
+workshopChecksum=(digest(workshopData)+'  '+workshopName+'\n').encode()
+source['release-assets/'+workshopName]=workshopData
+source['release-assets/'+workshopName+'.sha256']=workshopChecksum
 source['release-assets/'+runtimeName]=runtimeData
 source['release-assets/'+runtimeName+'.sha256']=checksum
 sourceData=zip_bytes(source)
@@ -55,12 +60,14 @@ def audit(data,expected):
         assert set(z.namelist())==set(expected)
         for n in z.namelist():
             safe(n);assert z.read(n)==expected[n]
-            if n.endswith('.zip'):audit(z.read(n),runtime)
-audit(runtimeData,runtime);audit(sourceData,source)
+            if n.endswith('.zip'):audit(z.read(n),workshop if n.endswith(workshopName) else runtime)
+audit(runtimeData,runtime);audit(workshopData,workshop);audit(sourceData,source)
+(out/workshopName).write_bytes(workshopData)
+(out/(workshopName+'.sha256')).write_bytes(workshopChecksum)
 (out/runtimeName).write_bytes(runtimeData)
 (out/(runtimeName+'.sha256')).write_bytes(checksum)
 (out/sourceName).write_bytes(sourceData)
 (out/(sourceName+'.sha256')).write_text(digest(sourceData)+'  '+sourceName+'\n')
-report={'project':project,'version':version,'audit':'passed','runtimeMembers':{n:digest(d) for n,d in runtime.items()},'sourceMembers':sorted(source),'archives':{runtimeName:digest(runtimeData),sourceName:digest(sourceData)}}
+report={'project':project,'version':version,'audit':'passed','runtimeMembers':{n:digest(d) for n,d in runtime.items()},'sourceMembers':sorted(source),'workshopMembers':{n:digest(d) for n,d in workshop.items()},'archives':{runtimeName:digest(runtimeData),workshopName:digest(workshopData),sourceName:digest(sourceData)}}
 (out/(stem+'-AUDIT.json')).write_text(json.dumps(report,indent=2)+'\n')
 print(json.dumps({'project':project,'runtimeFiles':len(runtime),'sourceFiles':len(source),'audit':'passed'}))

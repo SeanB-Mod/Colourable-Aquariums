@@ -1,5 +1,5 @@
 {
-  "project": "Colourable-Aquariums",
+  "project": "Colourable-Aquariums-SteamWorkshop",
   "source": [
     ".gitattributes",
     ".gitignore",
@@ -22,7 +22,6 @@
     "src/AquariumWindowHost.h",
     "src/BoundedLog.h",
     "src/ColourPickerBridge.h",
-    "src/CrashDiagnostic.h",
     "src/GameThreadBootstrap.h",
     "src/InputSafety.h",
     "src/LightingConsumer.h",
@@ -40,7 +39,6 @@
     "src/test_colour_bridge.cpp",
     "src/test_discovery.py",
     "src/test_donor.py",
-    "src/test_exception.cpp",
     "src/test_factory.py",
     "src/test_glow_queue.py",
     "src/test_guard.py",
@@ -61,7 +59,17 @@
     "src/test_swatches.py",
     "src/test_ui.cpp",
     "src/test_window_host.cpp",
-    "src/verify_game_hooks.py"
+    "src/verify_game_hooks.py",
+    "src/test_glow_routing.py",
+    "src/test_glow_transition.py",
+    "src/DefaultAquariumLight.h",
+    "src/test_dredge_baseline.py",
+    "WORKSHOP_DESCRIPTION.md",
+    "src/InputHookGuard.h",
+    "src/test_input_hook_guard.cpp",
+    "TEST_BUILD.md",
+    "src/test_ui_hook_rollback.py",
+    "CHANGES.patch"
   ],
   "runtime": {
     "Mods/TPM-AquaColour.dll": "$BINARY"

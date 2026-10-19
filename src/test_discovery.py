@@ -12,7 +12,12 @@ work=pathlib.Path(sys.argv[2]);work.mkdir(parents=True,exist_ok=True)
 fixture=r'''
 #include <cstdio>
 #include <cstdlib>
-using uptr=unsigned long long;
+using uptr=unsigned long long;using u64=unsigned long long;using AquariumGCHandle=unsigned long long;using Il2CppObject=void;
+struct P79Timing {P79Timing(unsigned){}};
+static u64 now=1000;static u64 clockNow(){return now;}static auto p56_clock=clockNow;
+static unsigned rootsCreated=0,rootsFreed=0,globalScans=0;
+static AquariumGCHandle il2cpp_gchandle_new(void*,bool){return ++rootsCreated;}
+static void il2cpp_gchandle_free(AquariumGCHandle){++rootsFreed;}
 struct Node {bool alive=true,active=false,open=false,aquarium=false;};
 struct Il2CppArray{uptr max_length;void* vector[2];};
 Node first,second,button;Il2CppArray objects{2,{&first,&second}};
@@ -21,7 +26,7 @@ void* M_Resources_FindAll=(void*)1;int refreshes=0,creates=0,visibleCount=0;
 void* find_class(const char*,const char*){return (void*)1;}
 void* il2cpp_class_get_type(void* p){return p;}
 void* il2cpp_type_get_object(void* p){return p;}
-void* invoke(void*,void*,void**){return &objects;}
+void* invoke(void*,void*,void**){++globalScans;return &objects;}
 bool p56_alive(void* p){return p&&((Node*)p)->alive;}
 bool p56_active(void* p){return p&&((Node*)p)->active;}
 bool p56_opened(void* p){return p&&((Node*)p)->open;}
@@ -39,11 +44,12 @@ int main(){
  first.active=first.open=true;p57_reconcile();check(refreshes==0);
  first.aquarium=true;p57_reconcile();check(refreshes==1&&creates==0);
  donorReady=true;p57_reconcile();check(creates==1&&visibleCount==1);
- for(int i=0;i<1000;++i)p57_reconcile();check(creates==1&&visibleCount==1);
+ for(int i=0;i<1000;++i)p57_reconcile();check(creates==1&&visibleCount==1&&globalScans==1);
  button.active=false;p57_reconcile();check(creates==2&&visibleCount==1);
  p56_menu=&first;button.active=false;p57_reconcile();check(creates==2);
  p56_menu=nullptr;first.open=false;second.active=second.open=second.aquarium=true;
  p57_reconcile();check(p56_inspector==&second&&visibleCount==1&&creates==3);
+ second.alive=false;first.alive=false;now+=6000;p57_reconcile();check(rootsFreed>=3);
  std::puts("Discovery regression passed: delayed room/donor, 1000 duplicate-free retries, hidden-button recovery, editor exclusion, inspector replacement.");
 }
 '''

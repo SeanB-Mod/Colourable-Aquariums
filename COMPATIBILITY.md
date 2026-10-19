@@ -1,20 +1,13 @@
-# Compatibility and release status
+# Test-build compatibility
 
-These are Windows x64 releases. The owner confirmed completion of the in-game checks on 27 September 2026. The installed game identity is recorded in GAME_BUILD.json; no game binaries or API dumps are redistributed.
+The UpdateInput guard described in TEST_BUILD.md supersedes the original two-signature allowlist. No universal game-version compatibility is claimed. Owner confirmed v1.0.1 works in-game on 19 October 2026. Confirmation from the originally affected user is pending. The following v1.0 notes are historical context.
 
-The loader forwards 92 WinHTTP exports to the System32 library. It does not initiate telemetry or network requests; the game and separately installed mods may use WinHTTP normally. Missing system exports fail explicitly rather than invent an ABI-incompatible return value. Mod loading runs on a worker after DllMain; there is no hot-unload support and DllMain never waits for that worker.
+# Compatibility
 
-Colourable Aquariums dispatches Unity setup and updates on the game thread. Its native hooks check known prologue bytes before patching and refuse a mismatching target. The six UI patches are checked as a batch with rollback on installation failure. These checks reduce risk; they do not establish universal update compatibility or guarantee rollback when Windows refuses protection changes. The lighting consumer and update hook are separately guarded.
+Windows x64, Two Point Museum, TPM Mod Loader v1.2.5 or later. The same DLL supports local `Mods` and Workshop `DLL Mod` installations. Expanded Colour Picker integration is optional; Mod Engine is not required.
 
-Expanded Colour Picker resolves named IL2CPP/UI APIs and uses the verified 64-bit, one-dimensional array layout (data at 0x20). Missing required APIs prevent setup, but there is no runtime whole-game hash gate: an update that preserves names while changing semantics/layout may still be incompatible. The centralized array helper documents this assumption; it does not make the DLL portable. Revalidate after game updates.
+GAME_BUILD.json records the installed game files inspected on 10 October 2026. Native hooks resolve through runtime metadata and check exact known instruction sequences, including the accepted October UI input variant. The default Dredge lighting reader additionally checks its native call sequence and runtime field types. Missing or incompatible APIs fail closed; these checks do not promise compatibility with future game updates.
 
-The two colour mods discover each other through optional runtime exports. Neither imports the other's DLL. Mod Engine is a separate, binary-only project and is not supplied or modified here. All function-key bindings in these three source releases are removed/absent; this does not change controls in separately installed software. Ctrl sampling, Tab/Shift+Tab and Escape remain available where applicable.
+All Unity work uses the game thread. There is no hot-unload support; close the game before changing local DLLs. Both installed copies should not be used independently: the loader prioritises a successful local load.
 
-## In-game checks
-
-- Loader with no mods, then each colour mod alone, then both together.
-- Aquarium Choose Colour, wheel, swatches and reset/close buttons; F1–F12 cause no mod action.
-- Picker RGB/HEX, Tab/Shift+Tab, 35 swatches, tooltips in both drawer states, eyedropper button and Ctrl/cancel.
-- Save/load, quit/relaunch and switching save scopes retain the correct independent colours.
-
-The owner confirmed that the in-game checks have been completed. Licensing remains undecided by the owner's request; no MIT or other licence is assigned. Artwork provenance is recorded separately in SOURCE_NOTES.md.
+The user confirmed 100+ FPS, save/load/reset and fish transitions on the preceding candidates and approved the 25% Dredge output of 0.7.81.14. v1.0 keeps that rendering and removes temporary diagnostics. Automated checks are listed in VALIDATION.md; the final DLL has not been separately live-tested by the build agent.

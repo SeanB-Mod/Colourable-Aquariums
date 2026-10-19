@@ -1,0 +1,179 @@
+--- a/src/AquariumUI.h
++++ b/src/AquariumUI.h
+@@ -1,3 +1,4 @@
++#include "InputHookGuard.h"
+ // Included after the existing colour, live-state and native-hook helpers.
+ #include "AquariumSelection.h"
+ using P56Void=void(*)(void*,const MethodInfo*);
+@@ -426,8 +427,6 @@
+     static const u8 refresh[]={0x48,0x89,0x5c,0x24,0x10,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57};
+     static const u8 close[]={0x48,0x89,0x5c,0x24,0x10,0x48,0x89,0x6c,0x24,0x18,0x48,0x89,0x74,0x24,0x20};
+     static const u8 input[]={0x40,0x56,0x57,0x48,0x83,0xec,0x38,0x4c,0x8b,0x15,0xba,0x1f,0x9a,0x03};
+-    // Exact additional sequence observed in the installed October beta. Only the RIP displacement differs.
+-    static const u8 inputOctober[]={0x40,0x56,0x57,0x48,0x83,0xec,0x38,0x4c,0x8b,0x15,0xe2,0x9b,0x9a,0x03};
+     static const u8 press[]={0x40,0x53,0x48,0x83,0xec,0x20,0x48,0x83,0xb9,0xf8,0,0,0,0};
+     static const u8 force[]={0x40,0x53,0x48,0x83,0xec,0x20,0x48,0x8b,0xd9,0x48,0x8b,0x49,0x60,0x48,0x85,0xc9};
+     P56Hook hooks[]={
+@@ -442,11 +441,23 @@
+     // Check EVERY target before modifying any code. Unsupported game builds fail closed.
+     for(auto& h:hooks){auto c=find_class(h.ns,h.cls);auto m=c?find_method_name_params(c,h.method,h.argc):nullptr;h.target=m?(u8*)*(void* const*)m:nullptr;
+         if(!h.target||!ptr_in_module(h.target,find_loaded_module("GameAssembly.dll"),32))return abandon();
+-        bool octoberInput=h.ripR10&&h.size==14;
+-        if(octoberInput)for(int i=0;i<14;++i)if(h.target[i]!=inputOctober[i])octoberInput=false;
+-        for(int i=0;i<h.size;++i)if(h.target[i]!=h.bytes[i]&&!octoberInput){char diag[300];psprintf(diag,"0.7.81 UI: %s.%s prologue mismatch at +%d (got %02X expected %02X); no UI hooks installed.\r\n",h.cls,h.method,i,(unsigned)h.target[i],(unsigned)h.bytes[i]);log_raw(diag);return abandon();}
++        // Only the disp32 operand may vary; all instruction bytes remain exact.
++        int checkedBytes=h.ripR10?10:h.size;
++        for(int i=0;i<checkedBytes;++i)if(h.target[i]!=h.bytes[i]){char diag[300];psprintf(diag,"1.0.1-test UI: %s.%s prologue mismatch at +%d (got %02X expected %02X); no UI hooks installed.\r\n",h.cls,h.method,i,(unsigned)h.target[i],(unsigned)h.bytes[i]);log_raw(diag);return abandon();}
++        if(h.ripR10){
++            void* ga=find_loaded_module("GameAssembly.dll");uptr operand=0;
++            if(!p91_input_operand(h.target,(uptr)ga,pe_image_size(ga),operand)){
++                log_raw("1.0.1-test UI: UpdateInput RIP operand outside GameAssembly; no UI hooks installed.\r\n");return abandon();
++            }
++            using QueryFn=usize(*)(const void*,P91MemoryInfo*,usize);
++            auto query=(QueryFn)resolve_export(find_loaded_module("kernel32.dll"),"VirtualQuery");
++            P91MemoryInfo memory{};
++            if(!query || query((void*)operand,&memory,sizeof(memory))!=sizeof(memory) || !p91_operand_readable(operand,(uptr)ga,memory)){
++                log_raw("1.0.1-test UI: UpdateInput RIP operand is not readable GameAssembly image memory; no UI hooks installed.\r\n");return abandon();
++            }
++            char diag[300];psprintf(diag,"1.0.1-test UI: UpdateInput signature accepted; RIP bytes=%02X %02X %02X %02X; operand RVA=0x%X validated.\r\n",(unsigned)h.target[10],(unsigned)h.target[11],(unsigned)h.target[12],(unsigned)h.target[13],(unsigned)(operand-(uptr)ga));log_raw(diag);
++        }
+         memcpy(h.originalBytes,h.target,h.size);
+-        if(octoberInput)log_raw("0.7.81.6 UI: exact October UpdateInput variant accepted; runtime RIP operand retained.\r\n");
+         h.trampoline=(u8*)pVirtualAlloc(nullptr,64,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE);if(!h.trampoline)return abandon();
+         int n=h.size;
+         if(h.ripR10){
+@@ -464,5 +475,5 @@
+         pFlushInstructionCache(pGetCurrentProcess(),h.target,h.size);DWORD ignored;pVirtualProtect(h.target,h.size,old,&ignored);++patched;
+     }
+     if(patched!=6){for(int i=0;i<patched;++i){auto& h=hooks[i];DWORD old=0;if(pVirtualProtect(h.target,h.size,PAGE_EXECUTE_READWRITE,&old)){memcpy(h.target,h.originalBytes,h.size);pFlushInstructionCache(pGetCurrentProcess(),h.target,h.size);DWORD ignored;pVirtualProtect(h.target,h.size,old,&ignored);}}return false;}
+-    p56_ready=true;log_raw("0.7.81 UI: six guarded hooks installed on game thread; native aquarium button enabled.\r\n");return true;
+-}
++    p56_ready=true;log_raw("1.0.1-test UI: six guarded hooks installed on game thread; native aquarium button enabled.\r\n");return true;
++}
+--- /dev/null
++++ b/src/InputHookGuard.h
+@@ -0,0 +1,30 @@
++#pragma once
++// x64 Windows MEMORY_BASIC_INFORMATION layout; no Windows SDK dependency.
++struct P91MemoryInfo {
++    void* base; void* allocationBase; unsigned long allocationProtect;
++    unsigned short partitionId; usize regionSize;
++    unsigned long state, protect, type;
++};
++static_assert(sizeof(P91MemoryInfo)==48,"x64 memory query layout");
++static bool p91_input_operand(const u8* code, uptr module, usize imageSize, uptr& operand) {
++    static const u8 prefix[]={0x40,0x56,0x57,0x48,0x83,0xec,0x38,0x4c,0x8b,0x15};
++    operand=0;
++    uptr pc=(uptr)code;
++    if(pc<module || imageSize<14 || pc-module>imageSize-14)return false;
++    for(int i=0;i<10;++i)if(code[i]!=prefix[i])return false;
++    u32 raw=(u32)code[10]|((u32)code[11]<<8)|((u32)code[12]<<16)|((u32)code[13]<<24);
++    i64 displacement=(raw&0x80000000u)?(i64)raw-0x100000000ll:(i64)raw;
++    // Work in module-relative offsets to avoid unsigned address wraparound.
++    i64 relative=(i64)(pc-module)+14+displacement;
++    if(relative<0 || imageSize<8 || (uptr)relative>imageSize-8)return false;
++    operand=module+(uptr)relative;
++    return true;
++}
++static bool p91_operand_readable(uptr operand, uptr module, const P91MemoryInfo& m) {
++    if((uptr)m.allocationBase!=module || m.state!=0x1000 || m.type!=0x1000000)return false;
++    if(m.protect&0x100)return false; // PAGE_GUARD
++    unsigned long access=m.protect&0xff;
++    if(access!=0x02 && access!=0x04 && access!=0x08 && access!=0x20 && access!=0x40 && access!=0x80)return false;
++    uptr base=(uptr)m.base;
++    return operand>=base && m.regionSize>=8 && operand-base<=m.regionSize-8;
++}
+--- /dev/null
++++ b/src/test_input_hook_guard.cpp
+@@ -0,0 +1,37 @@
++#include <initializer_list>
++#include <cassert>
++#include <cstdio>
++#include <cstring>
++using u8=unsigned char; using u32=unsigned int; using i64=long long;
++using uptr=unsigned long long; using usize=unsigned long long;
++#include "InputHookGuard.h"
++static u8 image[0x4000000];
++static void displacement(u8* code,u32 value){for(int i=0;i<4;++i)code[10+i]=(u8)(value>>(i*8));}
++int main(){
++ const u8 prefix[]={0x40,0x56,0x57,0x48,0x83,0xec,0x38,0x4c,0x8b,0x15};
++ u8* code=image+128;std::memcpy(code,prefix,10);
++ uptr base=(uptr)image,operand=0;
++ for(u32 d:{0x039a1fbau,0x039a9be2u,0x039a1f02u}){
++  displacement(code,d);assert(p91_input_operand(code,base,sizeof(image),operand));assert(operand==(uptr)code+14+d);
++ }
++ for(int i=0;i<10;++i){code[i]^=1;assert(!p91_input_operand(code,base,sizeof(image),operand));code[i]^=1;}
++ displacement(code,0x80000000u);assert(!p91_input_operand(code,base,sizeof(image),operand));
++ displacement(code,0x7fffffffu);assert(!p91_input_operand(code,base,sizeof(image),operand));
++ displacement(code,(u32)(sizeof(image)-8-128-14));assert(p91_input_operand(code,base,sizeof(image),operand));assert(operand==base+sizeof(image)-8);
++ displacement(code,(u32)(sizeof(image)-7-128-14));assert(!p91_input_operand(code,base,sizeof(image),operand));
++ displacement(code,(u32)(-142));assert(p91_input_operand(code,base,sizeof(image),operand)&&operand==base);
++ displacement(code,(u32)(-143));assert(!p91_input_operand(code,base,sizeof(image),operand));
++ assert(!p91_input_operand(code,base,13,operand));
++ assert(!p91_input_operand((u8*)(base-1),base,sizeof(image),operand));
++ assert(!p91_input_operand(image+sizeof(image)-13,base,sizeof(image),operand));
++ P91MemoryInfo m{};m.base=image;m.allocationBase=image;m.regionSize=sizeof(image);m.state=0x1000;m.type=0x1000000;
++ for(unsigned long p:{2ul,4ul,8ul,0x20ul,0x40ul,0x80ul}){m.protect=p;assert(p91_operand_readable(base+128,base,m));}
++ for(unsigned long p:{0ul,1ul,0x10ul,0x104ul}){m.protect=p;assert(!p91_operand_readable(base+128,base,m));}
++ m.protect=4;m.state=0x2000;assert(!p91_operand_readable(base+128,base,m));m.state=0x1000;
++ m.type=0x20000;assert(!p91_operand_readable(base+128,base,m));m.type=0x1000000;
++ m.allocationBase=image+1;assert(!p91_operand_readable(base+128,base,m));m.allocationBase=image;
++ assert(p91_operand_readable(base+sizeof(image)-8,base,m));assert(!p91_operand_readable(base+sizeof(image)-7,base,m));
++ m.regionSize=7;assert(!p91_operand_readable(base,base,m));
++ std::puts("Input hook guard: original/October/02 synthetic variants, all opcode mutations, signed displacement, image and readable-region boundaries passed.");
++}
++
+--- /dev/null
++++ b/src/test_ui_hook_rollback.py
+@@ -0,0 +1,37 @@
++"""Exercise the production original-byte capture and partial-install rollback."""
++import pathlib,subprocess,sys,re
++root=pathlib.Path(__file__).parent
++s=(root/'AquariumUI.h').read_text()
++struct=re.search(r'struct P56Hook\{.*?\};',s)[0]
++rollback=next(line.strip() for line in s.splitlines() if line.strip().startswith('if(patched!=6)'))
++capture=re.search(r'memcpy\(h.originalBytes,h.target,h.size\);',s)[0]
++fixture=r'''
++#include <cassert>
++#include <cstdio>
++#include <cstring>
++using u8=unsigned char;using DWORD=unsigned long;
++static int failIndex=-1,protectIndex=0,flushes=0;
++static bool pVirtualProtect(void*,int,DWORD,DWORD* old){*old=0x20;return protectIndex++!=failIndex;}
++static void* pGetCurrentProcess(){return nullptr;}
++static void pFlushInstructionCache(void*,void*,int){++flushes;}
++#define PAGE_EXECUTE_READWRITE 0x40
++'''+struct+'\nstatic bool restore(int patched,P56Hook* hooks){'+rollback+'return true;}\n'+r'''
++int main(){
++ for(int count=1;count<6;++count){
++  P56Hook hooks[6]{};u8 code[6][16],live[6][16],expected[16]{};
++  for(int j=0;j<6;++j){auto& h=hooks[j];h.target=code[j];h.bytes=expected;h.size=j==3?14:16;
++   for(int i=0;i<16;++i)code[j][i]=live[j][i]=(u8)(0x40+j+i);
++   code[j][10]=live[j][10]=0x02;
++'''+capture+r'''
++   if(j<count)std::memset(code[j],0xcc,h.size);
++  }
++  protectIndex=0;failIndex=-1;flushes=0;assert(!restore(count,hooks));assert(flushes==count);
++  for(int j=0;j<6;++j)assert(std::memcmp(code[j],live[j],16)==0);
++ }
++ std::puts("UI partial-install rollback: actual live bytes (including 02 operand) restored for failures after hooks 1 through 5; unpatched bytes preserved.");
++}
++'''
++out=pathlib.Path(sys.argv[2]);out.mkdir(parents=True,exist_ok=True)
++cpp=out/'ui_hook_rollback.cpp';cpp.write_text(fixture);exe=out/'ui_hook_rollback.exe'
++subprocess.run([sys.argv[1],'-O2',str(cpp),'-o',str(exe)],check=True)
++subprocess.run([str(exe.resolve())],check=True)
+--- a/src/run_tests.py
++++ b/src/run_tests.py
+@@ -4,9 +4,9 @@
+ if sys.platform=='win32':ctypes.windll.kernel32.SetErrorMode(0x8003)
+ root=pathlib.Path(__file__).resolve().parent;out=pathlib.Path(a.output).resolve();out.mkdir(parents=True,exist_ok=True)
+ compiler=str(pathlib.Path(a.compiler).resolve());results=[]
+-for name in ['test_dredge_baseline','test_glow_transition','test_glow_routing','test_swatch_update','test_palette_edit','test_reticle','test_state_cache','test_material_lifecycle','test_input_focus','test_snapshot_io','test_click','test_guard','test_handles_and_poll','test_glow_queue','test_swatches','test_discovery','test_donor','test_factory','test_reset_material']:
++for name in ['test_ui_hook_rollback','test_dredge_baseline','test_glow_transition','test_glow_routing','test_swatch_update','test_palette_edit','test_reticle','test_state_cache','test_material_lifecycle','test_input_focus','test_snapshot_io','test_click','test_guard','test_handles_and_poll','test_glow_queue','test_swatches','test_discovery','test_donor','test_factory','test_reset_material']:
+  subprocess.run([sys.executable,str(root/(name+'.py')),compiler,str(out)],check=True,timeout=90);results.append(name)
+-for name in ['test_sampling_bridge','test_palette_bridge','test_colour_bridge','test_bounded_log','test_runtime_work','test_bootstrap','test_persistence','test_soft_glow','test_ui','test_window_host']:
++for name in ['test_input_hook_guard','test_sampling_bridge','test_palette_bridge','test_colour_bridge','test_bounded_log','test_runtime_work','test_bootstrap','test_persistence','test_soft_glow','test_ui','test_window_host']:
+  exe=out/(name+'.exe');subprocess.run([compiler,'-O2','-static',str(root/(name+'.cpp')),'-o',str(exe)],check=True,timeout=90)
+  subprocess.run([str(exe)],check=True,timeout=30);results.append(name)
+  if name=='test_bootstrap':subprocess.run([str(exe),'timeout'],check=True,timeout=30);results.append('test_bootstrap_timeout')

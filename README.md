@@ -1,41 +1,45 @@
-# Colourable Aquariums
+# Colourable Aquariums - Steam Workshop v1.0.1
 
-Version **0.7.81.5** · Windows x64 · Two Point Museum
+Windows x64 mod for Two Point Museum. Adds a Choose Colour action to aquarium rooms, with a colour wheel, swatches, reset and saved per-museum colours. Standard tanks retain normal lighting; Dredge tanks use 25% of the corrected normal aquarium glow brightness. Adding or removing Dredge fish retains the selected tank colour.
 
-Adds a Choose Colour action to supported aquarium rooms. Aquarium colours are saved separately under Mods/Saves. Works independently of Expanded Colour Picker; installing both enables its 35 swatches, RGB/HEX entry and eyedropper.
+## v1.0.1 compatibility fix
 
-<img width="1277" height="827" alt="Screenshot 2026-09-27 135130" src="https://github.com/user-attachments/assets/3b221bf0-76cb-4ae0-b722-99d23bed21f7" />
+Fixes a missing aquarium colour wheel when the game changes the address displacement in ItemColorPickerMenu.UpdateInput. The instruction bytes and live address are validated before installing the hook. Retains the Steam Workshop v1.0 features, lighting and save behaviour.
+
+Owner confirmed v1.0.1 works in-game on 19 October 2026. Confirmation from the originally affected user is pending. See VALIDATION.md for the scope of verification.
+
+[Download v1.0.1](https://github.com/SeanB-Mod/Colourable-Aquariums/releases/tag/v1.0.1)
+
+<img width="1277" height="827" alt="Aquarium colour picker" src="https://github.com/user-attachments/assets/3b221bf0-76cb-4ae0-b722-99d23bed21f7" />
 
 ## Video
 
 https://www.youtube.com/watch?v=VCXSuzt28XY
 
-## Installation
+## Steam Workshop installation
 
-Install the Two Point Museum Mod Loader separately. Close the game, then extract the release ZIP into the folder containing TPM.exe so the DLL lands in Mods. Add TPM-AquaColour.dll once to the numbered [Mods] list in Mods/loader.ini if it is not already present. The other colour mod and Mod Engine are not required.
+Install TPM Mod Loader v1.2.5 or later separately in the game folder containing TPM.exe. The loader cannot run directly from a Workshop subscription: open the loader download location and copy its installation files into the game folder as described by its instructions.
 
-To update, replace only this mod's DLL while the game is closed. Preserve Mods/Saves. To uninstall, remove this mod's INI entry and DLL; keep its saved data if you may reinstall.
+Subscribe to this mod and allow Steam to finish downloading. Keep its DLL in the Workshop item's `DLL Mod` folder. The compatible loader discovers it under the game's Workshop content folder (game ID 2185060); the numbered item ID can change without editing this mod. Restart the game after subscribing or updating.
 
-## Usage
+## Local / Nexus installation
 
-Select an aquarium room and use its Choose Colour action. Use the colour wheel and swatches to set its colour. With Expanded Colour Picker installed, the same window gains RGB/HEX entry, 35 swatches and screen colour sampling. This DLL exposes optional compatibility entry points; it has no required import of Colour Picker.
+Close the game. Extract the Windows-x64 ZIP into the game folder so `TPM-AquaColour.dll` lands in `Mods`. Add it once to the numbered `[Mods]` list in `Mods/loader.ini` if missing. The same DLL supports both installation methods. A successfully loaded local copy takes priority over its Workshop copy; remove an older local DLL when switching to Workshop.
 
-## Requirements and compatibility
+## Use and optional integration
 
-Requires an installed Windows x64 copy of Two Point Museum. This is an unofficial mod, not a macOS/Linux build or a Workshop-only installation. Game updates can change native APIs; validation is against the local retail game installation used on 27 September 2026. Game binaries and SDK dumps are not distributed.
+Select an aquarium room and click Choose Colour. Use the wheel or swatches, then close the picker. Reset restores the tank's original appearance. Colours are stored separately from the game's museum save.
 
-Each colour mod can run without the other. Both require a compatible native DLL loader; the approved predecessor was live-tested with the WinHTTP loader setup. This release has the packaged automated validation results and owner-confirmed in-game checks described in COMPATIBILITY.md.
+Expanded Colour Picker is optional. Installing it adds its expanded swatches, RGB/HEX entry and eyedropper support. This mod does not require Mod Engine or Expanded Colour Picker.
 
-## Data and troubleshooting
+## Updates, data and troubleshooting
 
-Check Mods/Logs/AquariumColour.log. Aquarium snapshots and backups remain under Mods/Saves. No player saves, personal settings or logs are included in the release. Keep backups of your own saves before changing your mod setup.
+Close the game before replacing a local DLL. Logs and saved colour data are stored under the game's `Mods/Logs` and `Mods/Saves`, including when the DLL loads from Workshop. The log is `AquariumColour.log`. Preserve these folders when updating or switching installation methods. If migrating from an older version that wrote data beside its Workshop DLL, keep that data backed up; this release uses the game's Mods folder.
 
-## Source and release files
+Do not distribute your generated logs or saves with a Workshop upload. The prepared upload ZIP contains only `DLL Mod/TPM-AquaColour.dll`. The mod is Windows x64 only; native game updates may require a compatibility update.
 
-See BUILD.md for reproducible build commands, VALIDATION.md for checks and RELEASE_NOTES.md for the GitHub release description. VERSION records this release number. Source filenames retain historical internal names; DLL basenames are intentionally unchanged for loader compatibility. No new source license has been selected in this packaging. See SOURCE_NOTES.md for asset and dependency provenance.
+## Release validation
 
-## Release status
+All 32 isolated checks passed. The packaged source rebuilds to the exact DLL tested by the owner. The release retains the same DLL bytes and diagnostic `1.0.1-test` labels as that tested build. Original and October signatures are covered; confirmation on the originally reported user's build is still pending. See VALIDATION.md.
 
-Remove all legacy F8–F12 bindings and the diagnostic checkpoint. Preserve UI button actions and Escape-to-close. Remove unreachable metadata/render/glow probes and obsolete diagnostic helpers. Optional Colour Picker support remains independent.
-
-See COMPATIBILITY.md and GAME_BUILD.json. Licensing remains undecided; source availability is not a grant of an open-source licence.
+BUILD.md documents compilation; WORKSHOP_DESCRIPTION.md contains ready-to-paste listing text. No source licence has been assigned. See SOURCE_NOTES.md for provenance.
